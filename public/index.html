@@ -38,6 +38,15 @@
       margin-top: 20px;
       border-radius: 8px;
     }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: red;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
@@ -57,6 +66,11 @@
     <div class="card">
       <h3>Live Location</h3>
       <iframe id="map" src="" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+    </div>
+
+    <div class="card">
+      <h3>🔁 Remote Control</h3>
+      <button onclick="sendReset()">Reset SIM7600</button>
     </div>
   </div>
 
@@ -86,7 +100,7 @@
           tooltip: { enabled: false },
           datalabels: {
             display: true,
-            formatter: (value, ctx) => `${lastTemp} °C`,
+            formatter: () => `${lastTemp} °C`,
             color: '#fff',
             font: {
               weight: 'bold',
@@ -166,6 +180,13 @@
           }
         });
     }, 3000);
+
+    function sendReset() {
+      fetch('/reset', { method: 'POST' })
+        .then(res => res.text())
+        .then(msg => alert(msg))
+        .catch(err => alert('Failed to send reset command'));
+    }
   </script>
 </body>
 </html>
