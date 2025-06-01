@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SIM7600 Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    #map {
+      width: 100%;
+      max-width: 600px;
+      height: 400px;
+      border: 2px solid #333;
+      margin-top: 20px;
+    }
+    #chart-container {
+      width: 100%;
+      max-width: 600px;
+      margin-top: 30px;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>🌡️ Temperature: <span id="temp">--</span> °C</h2>
+  <h3>📩 Message: <span id="msg">--</span></h3>
+
+  <h4>📍 Live Location:</h4>
+  <iframe id="map" src="" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+
+  <div id="chart-container">
+    <canvas id="tempChart"></canvas>
+  </div>
+
+  <script>
+    const tempData = {
+      labels: [],
+      datasets: [{
+        label: 'Temperature (°C)',
+        data: [],
+        borderColor: 'orange',
+        backgroundColor: 'rgba(255,165,0,0.2)',
+        fill: true,
+        tension: 0.3
+      }]
+    };
+
+    const tempConfig = {
+      type: 'line',
+      data: tempData,
+      options: {
+        responsive: true,
+        scales: {
+          x: {
+            title: { display: true, text: 'Time' }
+          },
+          y: {
+            suggestedMin: 0,
+            suggestedMax: 50,
+            title: { display: true, text: '°C' }
+          }
+        }
+      }
+    };
+
+    const tempChart = new Chart(document.getElementById('tempChart'), tempConfig);
+
+    setInterval(() => {
+      fetch('http://localhost:3000/latest')
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById('temp').innerText = data.temp || '--';
+          document.getElementById('msg').innerText = data.msg || '--';
+
+          if (data.lat && data.lon) {
+            const mapsURL = `https://maps.google.com/maps?q=${data.lat},${data.lon}&z=15&output=embed`;
+            document.getElementById('map').src = mapsURL;
+          }
+
+          // Update chart
+          if (data.temp) {
+            const now = new Date();
+            const timeLabel = now.toLocaleTimeString();
+
+            tempData.labels.push(timeLabel);
+            tempData.datasets[0].data.push(data.temp);
+
+            // Keep last 20 points
+            if (tempData.labels.length > 20) {
+              tempData.labels.shift();
+              tempData.datasets[0].data.shift();
+            }
+
+            tempChart.update();
+          }
+        });
+    }, 3000);
+  </script>
+
+</body>
+</html>
