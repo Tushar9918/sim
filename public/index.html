@@ -1,20 +1,38 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>SIM7600 Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+      margin: 0;
+    }
+
+    h2, h3, h4 {
+      margin: 10px 0;
+    }
+
     #map {
       width: 100%;
-      max-width: 600px;
-      height: 400px;
+      height: 300px;
       border: 2px solid #333;
       margin-top: 20px;
     }
+
     #chart-container {
       width: 100%;
       max-width: 600px;
-      margin-top: 30px;
+      margin: 30px auto;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: auto !important;
     }
   </style>
 </head>
@@ -48,6 +66,7 @@
       data: tempData,
       options: {
         responsive: true,
+        maintainAspectRatio: false,
         scales: {
           x: {
             title: { display: true, text: 'Time' }
@@ -64,12 +83,13 @@
     const tempChart = new Chart(document.getElementById('tempChart'), tempConfig);
 
     setInterval(() => {
-      fetch('http://localhost:3000/latest')
+      fetch('/latest')
         .then(res => res.json())
         .then(data => {
           document.getElementById('temp').innerText = data.temp || '--';
           document.getElementById('msg').innerText = data.msg || '--';
 
+          // Update map
           if (data.lat && data.lon) {
             const mapsURL = `https://maps.google.com/maps?q=${data.lat},${data.lon}&z=15&output=embed`;
             document.getElementById('map').src = mapsURL;
@@ -83,7 +103,6 @@
             tempData.labels.push(timeLabel);
             tempData.datasets[0].data.push(data.temp);
 
-            // Keep last 20 points
             if (tempData.labels.length > 20) {
               tempData.labels.shift();
               tempData.datasets[0].data.shift();
@@ -91,7 +110,8 @@
 
             tempChart.update();
           }
-        });
+        })
+        .catch(err => console.error('Fetch error:', err));
     }, 3000);
   </script>
 
