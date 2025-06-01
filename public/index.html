@@ -2,123 +2,170 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>SIM7600 Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Temperature Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-streaming@2.0.0"></script>
   <style>
     body {
+      background-color: #121212;
+      color: #fff;
       font-family: Arial, sans-serif;
       text-align: center;
-      padding: 20px;
       margin: 0;
+      padding: 20px;
     }
-
-    h2, h3, h4 {
-      margin: 10px 0;
+    .container {
+      max-width: 800px;
+      margin: auto;
     }
-
+    .card {
+      background: #1e1e1e;
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    }
+    canvas {
+      width: 100% !important;
+      height: auto !important;
+    }
     #map {
       width: 100%;
       height: 300px;
       border: 2px solid #333;
       margin-top: 20px;
-    }
-
-    #chart-container {
-      width: 100%;
-      max-width: 600px;
-      margin: 30px auto;
-    }
-
-    canvas {
-      width: 100% !important;
-      height: auto !important;
+      border-radius: 8px;
     }
   </style>
 </head>
 <body>
+  <div class="container">
+    <h2>🌡️ Temperature Dashboard</h2>
 
-  <h2>🌡️ Temperature: <span id="temp">--</span> °C</h2>
-  <h3>📩 Message: <span id="msg">--</span></h3>
+    <div class="card">
+      <h3>Current Temperature</h3>
+      <canvas id="gaugeChart"></canvas>
+    </div>
 
-  <h4>📍 Live Location:</h4>
-  <iframe id="map" src="" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+    <div class="card">
+      <h3>Live Temperature History</h3>
+      <canvas id="lineChart"></canvas>
+    </div>
 
-  <div id="chart-container">
-    <canvas id="tempChart"></canvas>
+    <div class="card">
+      <h3>Live Location</h3>
+      <iframe id="map" src="" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+    </div>
   </div>
 
   <script>
-    const tempData = {
-      labels: [],
-      datasets: [{
-        label: 'Temperature (°C)',
-        data: [],
-        borderColor: 'orange',
-        backgroundColor: 'rgba(255,165,0,0.2)',
-        fill: true,
-        tension: 0.3
-      }]
-    };
+    let lastTemp = null;
+    const tempHistory = [];
+    const timeLabels = [];
 
-    const tempConfig = {
+    // === Gauge Chart Setup ===
+    const gaugeCtx = document.getElementById('gaugeChart').getContext('2d');
+    const gaugeChart = new Chart(gaugeCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Temperature'],
+        datasets: [{
+          data: [0, 100],
+          backgroundColor: ['orange', '#2b2b2b'],
+          borderWidth: 0,
+          cutout: '80%'
+        }]
+      },
+      options: {
+        rotation: -90,
+        circumference: 180,
+        responsive: true,
+        plugins: {
+          tooltip: { enabled: false },
+          datalabels: {
+            display: true,
+            formatter: (value, ctx) => `${lastTemp} °C`,
+            color: '#fff',
+            font: {
+              weight: 'bold',
+              size: 24
+            },
+            anchor: 'center',
+            align: 'center'
+          }
+        }
+      },
+      plugins: [ChartDataLabels]
+    });
+
+    // === Line Chart Setup ===
+    const lineCtx = document.getElementById('lineChart').getContext('2d');
+    const lineChart = new Chart(lineCtx, {
       type: 'line',
-      data: tempData,
+      data: {
+        labels: timeLabels,
+        datasets: [{
+          label: 'Temperature (°C)',
+          data: tempHistory,
+          borderColor: 'orange',
+          backgroundColor: 'rgba(255,165,0,0.1)',
+          fill: true,
+          tension: 0.3
+        }]
+      },
       options: {
         responsive: true,
-        maintainAspectRatio: false,
         scales: {
           x: {
-            title: { display: true, text: 'Time' }
+            ticks: { color: '#aaa' }
           },
           y: {
+            ticks: { color: '#aaa' },
             beginAtZero: false,
-            ticks: {
-              stepSize: 0.5
-            },
-            title: { display: true, text: '°C' }
+            suggestedMin: 10,
+            suggestedMax: 40
+          }
+        },
+        plugins: {
+          legend: {
+            labels: { color: '#fff' }
           }
         }
       }
-    };
+    });
 
-    const tempChart = new Chart(document.getElementById('tempChart'), tempConfig);
-    let lastTemp = null;
-
+    // === Fetch and Update ===
     setInterval(() => {
       fetch('/latest')
         .then(res => res.json())
         .then(data => {
-          document.getElementById('temp').innerText = data.temp || '--';
-          document.getElementById('msg').innerText = data.msg || '--';
+          if (!data.temp || data.temp === lastTemp) return;
+          lastTemp = data.temp;
 
-          // Update map
+          // Update gauge
+          gaugeChart.data.datasets[0].data[0] = lastTemp;
+          gaugeChart.data.datasets[0].data[1] = 100 - lastTemp;
+          gaugeChart.update();
+
+          // Update line chart
+          const now = new Date().toLocaleTimeString();
+          timeLabels.push(now);
+          tempHistory.push(lastTemp);
+          if (tempHistory.length > 20) {
+            timeLabels.shift();
+            tempHistory.shift();
+          }
+          lineChart.update();
+
+          // Update map if GPS is available
           if (data.lat && data.lon) {
             const mapsURL = `https://maps.google.com/maps?q=${data.lat},${data.lon}&z=15&output=embed`;
             document.getElementById('map').src = mapsURL;
           }
-
-          // Update chart only if temperature changed
-          if (data.temp && data.temp !== lastTemp) {
-            lastTemp = data.temp;
-
-            const now = new Date();
-            const timeLabel = now.toLocaleTimeString();
-
-            tempData.labels.push(timeLabel);
-            tempData.datasets[0].data.push(data.temp);
-
-            if (tempData.labels.length > 20) {
-              tempData.labels.shift();
-              tempData.datasets[0].data.shift();
-            }
-
-            tempChart.update();
-          }
-        })
-        .catch(err => console.error('Fetch error:', err));
+        });
     }, 3000);
   </script>
-
 </body>
 </html>
