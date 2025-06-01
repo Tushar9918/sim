@@ -3,10 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Temperature Dashboard</title>
+  <title>SIM7600 Bike Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-streaming@2.0.0"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     body {
       background-color: #121212;
@@ -17,7 +18,7 @@
       padding: 20px;
     }
     .container {
-      max-width: 800px;
+      max-width: 900px;
       margin: auto;
     }
     .card {
@@ -33,9 +34,8 @@
     }
     #map {
       width: 100%;
-      height: 300px;
+      height: 350px;
       border: 2px solid #333;
-      margin-top: 20px;
       border-radius: 8px;
     }
     button {
@@ -51,7 +51,7 @@
 </head>
 <body>
   <div class="container">
-    <h2>🌡️ Temperature Dashboard</h2>
+    <h2>🏍️ Bike Tracker Dashboard</h2>
 
     <div class="card">
       <h3>Current Temperature</h3>
@@ -64,8 +64,8 @@
     </div>
 
     <div class="card">
-      <h3>Live Location</h3>
-      <iframe id="map" src="" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+      <h3>Live Bike Location</h3>
+      <div id="map"></div>
     </div>
 
     <div class="card">
@@ -78,13 +78,11 @@
     let lastTemp = null;
     const tempHistory = [];
     const timeLabels = [];
+    let map, marker;
 
-    // === Gauge Chart Setup ===
-    const gaugeCtx = document.getElementById('gaugeChart').getContext('2d');
-    const gaugeChart = new Chart(gaugeCtx, {
+    const gaugeChart = new Chart(document.getElementById('gaugeChart').getContext('2d'), {
       type: 'doughnut',
       data: {
-        labels: ['Temperature'],
         datasets: [{
           data: [0, 100],
           backgroundColor: ['orange', '#2b2b2b'],
@@ -95,17 +93,13 @@
       options: {
         rotation: -90,
         circumference: 180,
-        responsive: true,
         plugins: {
           tooltip: { enabled: false },
           datalabels: {
             display: true,
-            formatter: () => `${lastTemp} °C`,
+            formatter: () => `${lastTemp ?? '--'} °C`,
             color: '#fff',
-            font: {
-              weight: 'bold',
-              size: 24
-            },
+            font: { weight: 'bold', size: 24 },
             anchor: 'center',
             align: 'center'
           }
@@ -114,9 +108,7 @@
       plugins: [ChartDataLabels]
     });
 
-    // === Line Chart Setup ===
-    const lineCtx = document.getElementById('lineChart').getContext('2d');
-    const lineChart = new Chart(lineCtx, {
+    const lineChart = new Chart(document.getElementById('lineChart').getContext('2d'), {
       type: 'line',
       data: {
         labels: timeLabels,
@@ -132,28 +124,44 @@
       options: {
         responsive: true,
         scales: {
-          x: {
-            ticks: { color: '#aaa' }
-          },
           y: {
+            min: 0,
+            max: 50,
             ticks: {
-              color: '#aaa',
-              stepSize: 0.2 // more granularity for minor fluctuation
-            },
-            beginAtZero: false,
-            min: 10,
-            max: 40
+              color: '#ccc',
+              stepSize: 0.5
+            }
+          },
+          x: {
+            ticks: { color: '#ccc' }
           }
         },
         plugins: {
-          legend: {
-            labels: { color: '#fff' }
-          }
+          legend: { labels: { color: '#fff' } }
         }
       }
     });
 
-    // === Fetch and Update ===
+    function initMap(lat, lon) {
+      map = L.map('map').setView([lat, lon], 16);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      marker = L.marker([lat, lon], {
+        icon: L.icon({
+          iconUrl: 'https://cdn-icons-png.flaticon.com/512/883/883807.png',
+          iconSize: [40, 40],
+          iconAnchor: [20, 40]
+        })
+      }).addTo(map);
+    }
+
+    function updateMap(lat, lon) {
+      if (marker) marker.setLatLng([lat, lon]);
+      if (map) map.setView([lat, lon]);
+    }
+
     setInterval(() => {
       fetch('/latest')
         .then(res => res.json())
@@ -161,14 +169,12 @@
           if (!data.temp || data.temp === lastTemp) return;
           lastTemp = data.temp;
 
-          // Update gauge
           gaugeChart.data.datasets[0].data[0] = lastTemp;
           gaugeChart.data.datasets[0].data[1] = 100 - lastTemp;
           gaugeChart.update();
 
-          // Update line chart
-          const now = new Date().toLocaleTimeString();
-          timeLabels.push(now);
+          const time = new Date().toLocaleTimeString();
+          timeLabels.push(time);
           tempHistory.push(lastTemp);
           if (tempHistory.length > 20) {
             timeLabels.shift();
@@ -176,10 +182,9 @@
           }
           lineChart.update();
 
-          // Update map if GPS is available
           if (data.lat && data.lon) {
-            const mapsURL = `https://maps.google.com/maps?q=${data.lat},${data.lon}&z=15&output=embed`;
-            document.getElementById('map').src = mapsURL;
+            if (!map) initMap(parseFloat(data.lat), parseFloat(data.lon));
+            else updateMap(parseFloat(data.lat), parseFloat(data.lon));
           }
         });
     }, 3000);
@@ -188,7 +193,7 @@
       fetch('/reset', { method: 'POST' })
         .then(res => res.text())
         .then(msg => alert(msg))
-        .catch(err => alert('Failed to send reset command'));
+        .catch(err => alert('Failed to send reset'));
     }
   </script>
 </body>
