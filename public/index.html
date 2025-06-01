@@ -72,8 +72,10 @@
             title: { display: true, text: 'Time' }
           },
           y: {
-            suggestedMin: 0,
-            suggestedMax: 50,
+            beginAtZero: false,
+            ticks: {
+              stepSize: 0.5
+            },
             title: { display: true, text: '°C' }
           }
         }
