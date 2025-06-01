@@ -83,6 +83,7 @@
     };
 
     const tempChart = new Chart(document.getElementById('tempChart'), tempConfig);
+    let lastTemp = null;
 
     setInterval(() => {
       fetch('/latest')
@@ -97,8 +98,10 @@
             document.getElementById('map').src = mapsURL;
           }
 
-          // Update chart
-          if (data.temp) {
+          // Update chart only if temperature changed
+          if (data.temp && data.temp !== lastTemp) {
+            lastTemp = data.temp;
+
             const now = new Date();
             const timeLabel = now.toLocaleTimeString();
 
