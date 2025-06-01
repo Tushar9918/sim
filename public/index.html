@@ -136,10 +136,13 @@
             ticks: { color: '#aaa' }
           },
           y: {
-            ticks: { color: '#aaa' },
+            ticks: {
+              color: '#aaa',
+              stepSize: 0.2 // more granularity for minor fluctuation
+            },
             beginAtZero: false,
-            suggestedMin: 10,
-            suggestedMax: 40
+            min: 10,
+            max: 40
           }
         },
         plugins: {
