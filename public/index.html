@@ -49,16 +49,16 @@
     }
     table {
       width: 100%;
-      margin-top: 10px;
+      color: #fff;
       border-collapse: collapse;
+      margin-top: 10px;
     }
     th, td {
+      padding: 10px;
       border: 1px solid #444;
-      padding: 8px;
-      color: #ccc;
     }
     th {
-      background-color: #2c2c2c;
+      background: #333;
     }
   </style>
 </head>
@@ -87,27 +87,28 @@
     </div>
 
     <div class="card">
-      <h3>📋 Last 10 Data Logs</h3>
+      <h3>📋 Last 10 Entries</h3>
       <table>
         <thead>
           <tr>
-            <th>Temp (°C)</th>
-            <th>Time</th>
             <th>Date</th>
+            <th>Time</th>
+            <th>Temp (°C)</th>
             <th>Lat</th>
             <th>Lon</th>
           </tr>
         </thead>
-        <tbody id="dataLog"></tbody>
+        <tbody id="historyTable"></tbody>
       </table>
     </div>
   </div>
 
   <script>
     let lastTemp = null;
-    const tempHistory = [];
-    const timeLabels = [];
     let map, marker;
+    const tempHistory = JSON.parse(localStorage.getItem('tempHistory') || '[]');
+    const timeLabels = JSON.parse(localStorage.getItem('timeLabels') || '[]');
+    const tableEntries = JSON.parse(localStorage.getItem('tableEntries') || '[]');
 
     const gaugeChart = new Chart(document.getElementById('gaugeChart').getContext('2d'), {
       type: 'doughnut',
@@ -171,6 +172,20 @@
       }
     });
 
+    function renderTable() {
+      const tbody = document.getElementById('historyTable');
+      tbody.innerHTML = '';
+      tableEntries.slice().reverse().forEach(entry => {
+        tbody.innerHTML += `<tr>
+          <td>${entry.date}</td>
+          <td>${entry.time}</td>
+          <td>${entry.temp}</td>
+          <td>${entry.lat ?? '--'}</td>
+          <td>${entry.lon ?? '--'}</td>
+        </tr>`;
+      });
+    }
+
     function initMap(lat, lon) {
       map = L.map('map').setView([lat, lon], 16);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -191,25 +206,26 @@
       if (map) map.setView([lat, lon]);
     }
 
-    function updateTable(entries) {
-      const table = document.getElementById('dataLog');
-      table.innerHTML = '';
-      entries.forEach(row => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${row.temp}</td><td>${row.time}</td><td>${row.date}</td><td>${row.lat ?? '--'}</td><td>${row.lon ?? '--'}</td>`;
-        table.appendChild(tr);
-      });
-    }
+    function pushDataPoint(temp, lat, lon) {
+      const now = new Date();
+      const time = now.toLocaleTimeString();
+      const date = now.toLocaleDateString();
 
-    function loadInitialData() {
-      const saved = localStorage.getItem('lastEntries');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        updateTable(parsed);
-      }
-    }
+      timeLabels.push(time);
+      tempHistory.push(temp);
+      if (timeLabels.length > 20) timeLabels.shift();
+      if (tempHistory.length > 20) tempHistory.shift();
+      lineChart.update();
 
-    loadInitialData();
+      tableEntries.push({ date, time, temp, lat, lon });
+      if (tableEntries.length > 10) tableEntries.shift();
+
+      localStorage.setItem('tempHistory', JSON.stringify(tempHistory));
+      localStorage.setItem('timeLabels', JSON.stringify(timeLabels));
+      localStorage.setItem('tableEntries', JSON.stringify(tableEntries));
+
+      renderTable();
+    }
 
     setInterval(() => {
       fetch('/latest')
@@ -222,37 +238,11 @@
           gaugeChart.data.datasets[0].data[1] = 100 - lastTemp;
           gaugeChart.update();
 
-          const now = new Date();
-          const time = now.toLocaleTimeString();
-          const date = now.toLocaleDateString();
-
-          timeLabels.push(time);
-          tempHistory.push(lastTemp);
-          if (tempHistory.length > 20) {
-            timeLabels.shift();
-            tempHistory.shift();
-          }
-          lineChart.update();
-
-          const newEntry = {
-            temp: lastTemp,
-            time,
-            date,
-            lat: data.lat ?? '--',
-            lon: data.lon ?? '--'
-          };
-
-          let entries = JSON.parse(localStorage.getItem('lastEntries') || '[]');
-          entries.push(newEntry);
-          if (entries.length > 10) entries.shift();
-          localStorage.setItem('lastEntries', JSON.stringify(entries));
-          updateTable(entries);
+          pushDataPoint(lastTemp, data.lat, data.lon);
 
           if (data.lat && data.lon) {
-            const lat = parseFloat(data.lat);
-            const lon = parseFloat(data.lon);
-            if (!map) initMap(lat, lon);
-            else updateMap(lat, lon);
+            if (!map) initMap(parseFloat(data.lat), parseFloat(data.lon));
+            else updateMap(parseFloat(data.lat), parseFloat(data.lon));
           }
         });
     }, 3000);
@@ -263,6 +253,8 @@
         .then(msg => alert(msg))
         .catch(err => alert('Failed to send reset'));
     }
+
+    renderTable();
   </script>
 </body>
 </html>
