@@ -50,14 +50,14 @@
     table {
       width: 100%;
       border-collapse: collapse;
+      background: #1e1e1e;
+      color: #fff;
       margin-top: 20px;
-      color: #ccc;
-    }
-    table, th, td {
-      border: 1px solid #444;
     }
     th, td {
+      border: 1px solid #444;
       padding: 8px;
+      font-size: 14px;
     }
     th {
       background-color: #333;
@@ -89,18 +89,18 @@
     </div>
 
     <div class="card">
-      <h3>📊 Last 10 Readings</h3>
+      <h3>📋 Last 10 Entries</h3>
       <table>
         <thead>
           <tr>
+            <th>Date</th>
             <th>Time</th>
             <th>Temperature (°C)</th>
             <th>Latitude</th>
             <th>Longitude</th>
           </tr>
         </thead>
-        <tbody id="data-table-body">
-        </tbody>
+        <tbody id="dataTable"></tbody>
       </table>
     </div>
   </div>
@@ -109,10 +109,8 @@
     let lastTemp = null;
     const tempHistory = [];
     const timeLabels = [];
+    const dataTableEntries = [];
     let map, marker;
-    const latestRows = [];
-
-    const tableBody = document.getElementById("data-table-body");
 
     const gaugeChart = new Chart(document.getElementById('gaugeChart').getContext('2d'), {
       type: 'doughnut',
@@ -196,6 +194,19 @@
       if (map) map.setView([lat, lon]);
     }
 
+    function updateTable(entry) {
+      dataTableEntries.unshift(entry);
+      if (dataTableEntries.length > 10) dataTableEntries.pop();
+
+      const tbody = document.getElementById('dataTable');
+      tbody.innerHTML = '';
+      dataTableEntries.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${row.date}</td><td>${row.time}</td><td>${row.temp}</td><td>${row.lat}</td><td>${row.lon}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
     setInterval(() => {
       fetch('/latest')
         .then(res => res.json())
@@ -207,7 +218,9 @@
           gaugeChart.data.datasets[0].data[1] = 100 - lastTemp;
           gaugeChart.update();
 
-          const time = new Date().toLocaleTimeString();
+          const now = new Date();
+          const time = now.toLocaleTimeString();
+          const date = now.toLocaleDateString();
           timeLabels.push(time);
           tempHistory.push(lastTemp);
           if (tempHistory.length > 20) {
@@ -217,28 +230,17 @@
           lineChart.update();
 
           if (data.lat && data.lon) {
-            const lat = parseFloat(data.lat);
-            const lon = parseFloat(data.lon);
-            if (!map) initMap(lat, lon);
-            else updateMap(lat, lon);
-
-            latestRows.push({
-              time,
-              temp: lastTemp,
-              lat: lat.toFixed(6),
-              lon: lon.toFixed(6)
-            });
-            if (latestRows.length > 10) latestRows.shift();
-
-            tableBody.innerHTML = latestRows.map(row => `
-              <tr>
-                <td>${row.time}</td>
-                <td>${row.temp}</td>
-                <td>${row.lat}</td>
-                <td>${row.lon}</td>
-              </tr>
-            `).join('');
+            if (!map) initMap(parseFloat(data.lat), parseFloat(data.lon));
+            else updateMap(parseFloat(data.lat), parseFloat(data.lon));
           }
+
+          updateTable({
+            date,
+            time,
+            temp: lastTemp,
+            lat: data.lat ?? '--',
+            lon: data.lon ?? '--'
+          });
         });
     }, 3000);
 
