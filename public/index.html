@@ -47,6 +47,21 @@
       border-radius: 5px;
       cursor: pointer;
     }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      color: #ccc;
+    }
+    table, th, td {
+      border: 1px solid #444;
+    }
+    th, td {
+      padding: 8px;
+    }
+    th {
+      background-color: #333;
+    }
   </style>
 </head>
 <body>
@@ -72,6 +87,22 @@
       <h3>🔁 Remote Control</h3>
       <button onclick="sendReset()">Reset SIM7600</button>
     </div>
+
+    <div class="card">
+      <h3>📊 Last 10 Readings</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Temperature (°C)</th>
+            <th>Latitude</th>
+            <th>Longitude</th>
+          </tr>
+        </thead>
+        <tbody id="data-table-body">
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <script>
@@ -79,6 +110,9 @@
     const tempHistory = [];
     const timeLabels = [];
     let map, marker;
+    const latestRows = [];
+
+    const tableBody = document.getElementById("data-table-body");
 
     const gaugeChart = new Chart(document.getElementById('gaugeChart').getContext('2d'), {
       type: 'doughnut',
@@ -183,8 +217,27 @@
           lineChart.update();
 
           if (data.lat && data.lon) {
-            if (!map) initMap(parseFloat(data.lat), parseFloat(data.lon));
-            else updateMap(parseFloat(data.lat), parseFloat(data.lon));
+            const lat = parseFloat(data.lat);
+            const lon = parseFloat(data.lon);
+            if (!map) initMap(lat, lon);
+            else updateMap(lat, lon);
+
+            latestRows.push({
+              time,
+              temp: lastTemp,
+              lat: lat.toFixed(6),
+              lon: lon.toFixed(6)
+            });
+            if (latestRows.length > 10) latestRows.shift();
+
+            tableBody.innerHTML = latestRows.map(row => `
+              <tr>
+                <td>${row.time}</td>
+                <td>${row.temp}</td>
+                <td>${row.lat}</td>
+                <td>${row.lon}</td>
+              </tr>
+            `).join('');
           }
         });
     }, 3000);
