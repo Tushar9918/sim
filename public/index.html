@@ -49,16 +49,17 @@
     }
     table {
       width: 100%;
-      color: #fff;
       border-collapse: collapse;
-      margin-top: 10px;
+      margin-top: 20px;
+      color: #fff;
     }
     th, td {
-      padding: 10px;
-      border: 1px solid #444;
+      border: 1px solid #333;
+      padding: 8px;
+      text-align: center;
     }
     th {
-      background: #333;
+      background-color: #333;
     }
   </style>
 </head>
@@ -87,28 +88,32 @@
     </div>
 
     <div class="card">
-      <h3>📋 Last 10 Entries</h3>
+      <h3>📊 Last 10 Records</h3>
       <table>
         <thead>
           <tr>
             <th>Date</th>
             <th>Time</th>
-            <th>Temp (°C)</th>
-            <th>Lat</th>
-            <th>Lon</th>
+            <th>Temperature (°C)</th>
+            <th>Latitude</th>
+            <th>Longitude</th>
           </tr>
         </thead>
-        <tbody id="historyTable"></tbody>
+        <tbody id="dataTable"></tbody>
       </table>
     </div>
   </div>
 
   <script>
     let lastTemp = null;
+    let firstLiveDataReceived = false;
+    const tempHistory = [];
+    const timeLabels = [];
     let map, marker;
-    const tempHistory = JSON.parse(localStorage.getItem('tempHistory') || '[]');
-    const timeLabels = JSON.parse(localStorage.getItem('timeLabels') || '[]');
-    const tableEntries = JSON.parse(localStorage.getItem('tableEntries') || '[]');
+
+    const storedTempData = JSON.parse(localStorage.getItem('tempHistory') || '[]');
+    const storedTimeLabels = JSON.parse(localStorage.getItem('timeLabels') || '[]');
+    const storedTableRows = JSON.parse(localStorage.getItem('dataTableRows') || '[]');
 
     const gaugeChart = new Chart(document.getElementById('gaugeChart').getContext('2d'), {
       type: 'doughnut',
@@ -172,20 +177,6 @@
       }
     });
 
-    function renderTable() {
-      const tbody = document.getElementById('historyTable');
-      tbody.innerHTML = '';
-      tableEntries.slice().reverse().forEach(entry => {
-        tbody.innerHTML += `<tr>
-          <td>${entry.date}</td>
-          <td>${entry.time}</td>
-          <td>${entry.temp}</td>
-          <td>${entry.lat ?? '--'}</td>
-          <td>${entry.lon ?? '--'}</td>
-        </tr>`;
-      });
-    }
-
     function initMap(lat, lon) {
       map = L.map('map').setView([lat, lon], 16);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -206,25 +197,28 @@
       if (map) map.setView([lat, lon]);
     }
 
-    function pushDataPoint(temp, lat, lon) {
-      const now = new Date();
-      const time = now.toLocaleTimeString();
-      const date = now.toLocaleDateString();
+    function addRowToTable(row) {
+      const table = document.getElementById('dataTable');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${row.date}</td><td>${row.time}</td><td>${row.temp}</td><td>${row.lat ?? '--'}</td><td>${row.lon ?? '--'}</td>`;
+      table.prepend(tr);
+      if (table.rows.length > 10) table.deleteRow(-1);
+    }
 
-      timeLabels.push(time);
-      tempHistory.push(temp);
-      if (timeLabels.length > 20) timeLabels.shift();
-      if (tempHistory.length > 20) tempHistory.shift();
-      lineChart.update();
-
-      tableEntries.push({ date, time, temp, lat, lon });
-      if (tableEntries.length > 10) tableEntries.shift();
-
-      localStorage.setItem('tempHistory', JSON.stringify(tempHistory));
-      localStorage.setItem('timeLabels', JSON.stringify(timeLabels));
-      localStorage.setItem('tableEntries', JSON.stringify(tableEntries));
-
-      renderTable();
+    function getLastTableRows() {
+      const rows = [];
+      const table = document.getElementById('dataTable');
+      for (let i = 0; i < table.rows.length; i++) {
+        const cells = table.rows[i].cells;
+        rows.push({
+          date: cells[0].textContent,
+          time: cells[1].textContent,
+          temp: cells[2].textContent,
+          lat: cells[3].textContent,
+          lon: cells[4].textContent
+        });
+      }
+      return rows;
     }
 
     setInterval(() => {
@@ -232,13 +226,40 @@
         .then(res => res.json())
         .then(data => {
           if (!data.temp || data.temp === lastTemp) return;
+
+          if (!firstLiveDataReceived) {
+            tempHistory.push(...storedTempData);
+            timeLabels.push(...storedTimeLabels);
+            storedTableRows.forEach(row => addRowToTable(row));
+            lineChart.update();
+            firstLiveDataReceived = true;
+          }
+
           lastTemp = data.temp;
 
           gaugeChart.data.datasets[0].data[0] = lastTemp;
           gaugeChart.data.datasets[0].data[1] = 100 - lastTemp;
           gaugeChart.update();
 
-          pushDataPoint(lastTemp, data.lat, data.lon);
+          const now = new Date();
+          const time = now.toLocaleTimeString();
+          const date = now.toLocaleDateString();
+
+          timeLabels.push(time);
+          tempHistory.push(lastTemp);
+          if (tempHistory.length > 20) {
+            timeLabels.shift();
+            tempHistory.shift();
+          }
+          lineChart.update();
+
+          const row = { temp: lastTemp, lat: data.lat, lon: data.lon, time, date };
+          addRowToTable(row);
+
+          const tableData = getLastTableRows();
+          localStorage.setItem('tempHistory', JSON.stringify(tempHistory));
+          localStorage.setItem('timeLabels', JSON.stringify(timeLabels));
+          localStorage.setItem('dataTableRows', JSON.stringify(tableData));
 
           if (data.lat && data.lon) {
             if (!map) initMap(parseFloat(data.lat), parseFloat(data.lon));
@@ -253,8 +274,6 @@
         .then(msg => alert(msg))
         .catch(err => alert('Failed to send reset'));
     }
-
-    renderTable();
   </script>
 </body>
 </html>
