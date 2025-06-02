@@ -49,18 +49,16 @@
     }
     table {
       width: 100%;
+      margin-top: 10px;
       border-collapse: collapse;
-      background: #1e1e1e;
-      color: #fff;
-      margin-top: 20px;
     }
     th, td {
       border: 1px solid #444;
       padding: 8px;
-      font-size: 14px;
+      color: #ccc;
     }
     th {
-      background-color: #333;
+      background-color: #2c2c2c;
     }
   </style>
 </head>
@@ -89,18 +87,18 @@
     </div>
 
     <div class="card">
-      <h3>📋 Last 10 Entries</h3>
+      <h3>📋 Last 10 Data Logs</h3>
       <table>
         <thead>
           <tr>
-            <th>Date</th>
+            <th>Temp (°C)</th>
             <th>Time</th>
-            <th>Temperature (°C)</th>
-            <th>Latitude</th>
-            <th>Longitude</th>
+            <th>Date</th>
+            <th>Lat</th>
+            <th>Lon</th>
           </tr>
         </thead>
-        <tbody id="dataTable"></tbody>
+        <tbody id="dataLog"></tbody>
       </table>
     </div>
   </div>
@@ -109,7 +107,6 @@
     let lastTemp = null;
     const tempHistory = [];
     const timeLabels = [];
-    const dataTableEntries = [];
     let map, marker;
 
     const gaugeChart = new Chart(document.getElementById('gaugeChart').getContext('2d'), {
@@ -194,18 +191,25 @@
       if (map) map.setView([lat, lon]);
     }
 
-    function updateTable(entry) {
-      dataTableEntries.unshift(entry);
-      if (dataTableEntries.length > 10) dataTableEntries.pop();
-
-      const tbody = document.getElementById('dataTable');
-      tbody.innerHTML = '';
-      dataTableEntries.forEach(row => {
+    function updateTable(entries) {
+      const table = document.getElementById('dataLog');
+      table.innerHTML = '';
+      entries.forEach(row => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${row.date}</td><td>${row.time}</td><td>${row.temp}</td><td>${row.lat}</td><td>${row.lon}</td>`;
-        tbody.appendChild(tr);
+        tr.innerHTML = `<td>${row.temp}</td><td>${row.time}</td><td>${row.date}</td><td>${row.lat ?? '--'}</td><td>${row.lon ?? '--'}</td>`;
+        table.appendChild(tr);
       });
     }
+
+    function loadInitialData() {
+      const saved = localStorage.getItem('lastEntries');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        updateTable(parsed);
+      }
+    }
+
+    loadInitialData();
 
     setInterval(() => {
       fetch('/latest')
@@ -221,6 +225,7 @@
           const now = new Date();
           const time = now.toLocaleTimeString();
           const date = now.toLocaleDateString();
+
           timeLabels.push(time);
           tempHistory.push(lastTemp);
           if (tempHistory.length > 20) {
@@ -229,18 +234,26 @@
           }
           lineChart.update();
 
-          if (data.lat && data.lon) {
-            if (!map) initMap(parseFloat(data.lat), parseFloat(data.lon));
-            else updateMap(parseFloat(data.lat), parseFloat(data.lon));
-          }
-
-          updateTable({
-            date,
-            time,
+          const newEntry = {
             temp: lastTemp,
+            time,
+            date,
             lat: data.lat ?? '--',
             lon: data.lon ?? '--'
-          });
+          };
+
+          let entries = JSON.parse(localStorage.getItem('lastEntries') || '[]');
+          entries.push(newEntry);
+          if (entries.length > 10) entries.shift();
+          localStorage.setItem('lastEntries', JSON.stringify(entries));
+          updateTable(entries);
+
+          if (data.lat && data.lon) {
+            const lat = parseFloat(data.lat);
+            const lon = parseFloat(data.lon);
+            if (!map) initMap(lat, lon);
+            else updateMap(lat, lon);
+          }
         });
     }, 3000);
 
